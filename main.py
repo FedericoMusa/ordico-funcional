@@ -3,7 +3,7 @@ import logging
 from PyQt5.QtWidgets import QPushButton, QVBoxLayout, QWidget, QMainWindow, QApplication, QHBoxLayout, QMessageBox
 from gui.login import LoginDialog
 from gui.user_management_window import UserManagementWindow  
-from gui.sales_window import SalesWindow  
+from gui.carrito import Carrito 
 from core.database import inicializar_db
 
 # Configuración de logging
@@ -78,7 +78,7 @@ class MainWindow(QMainWindow):
 
         layout.addLayout(btn_layout_sales)
 
-        self.btn_sales.clicked.connect(self.abrir_sales_window)
+        self.btn_sales.clicked.connect(self.abrir_carrito)
 
         self.central_widget.setLayout(layout)
     def abrir_stock_window(self):
@@ -92,10 +92,12 @@ class MainWindow(QMainWindow):
         self.user_management_window = UserManagementWindow()
         self.user_management_window.show()
 
-    def abrir_sales_window(self):
+    def abrir_carrito(self):
         """Abre la ventana de ventas."""
-        self.sales_window = SalesWindow()
-        self.sales_window.show()
+        logging.info("🛒 Abriendo la ventana del carrito de compras...")
+        self.carrito_window = Carrito()
+        self.carrito_window.show()
+    
 
 
 def main():

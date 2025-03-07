@@ -253,10 +253,10 @@ def actualizar_producto(nombre, marca, cantidad, precio, categoria):
                 """UPDATE productos 
                 SET nombre = ?, marca = ?, cantidad = ?, precio = ?, categoria = ?
                 WHERE id = ?""",
-                (nombre, marca, cantidad, precio, categoria, id_producto)  # El ID solo se usa en WHERE
+                (nombre, marca, cantidad, precio, categoria, id)  # El ID solo se usa en WHERE
             )
             conn.commit()
-            logging.info(f"✅ Producto actualizado con ID: {id_producto}")
+            logging.info(f"✅ Producto actualizado con ID: {id}")
             return True
         except sqlite3.Error as e:
             logging.error(f"❌ Error al actualizar producto: {e}")
