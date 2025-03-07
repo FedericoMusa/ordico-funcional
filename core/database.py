@@ -1,5 +1,6 @@
 import sqlite3
 import logging
+import pandas as pd
 from utils.config import DB_PATH  # ✅ Usa configuración centralizada
 
 # Configurar logging
@@ -240,7 +241,7 @@ def agregar_producto(nombre, marca, cantidad, precio, categoria):
         conn.close()
     
 
-def actualizar_producto(id_producto, nuevo_precio):
+def actualizar_producto(nombre, marca, cantidad, precio, categoria):
     """Actualiza el precio de un producto dado su ID."""
     """Agrega un nuevo producto a la base de datos."""
 
@@ -248,9 +249,14 @@ def actualizar_producto(id_producto, nuevo_precio):
     if conn:
         try:
             cursor = conn.cursor()
-            cursor.execute("UPDATE productos SET precio = ? WHERE id = ?", (nuevo_precio, id_producto))
+            cursor.execute(
+                """UPDATE productos 
+                SET nombre = ?, marca = ?, cantidad = ?, precio = ?, categoria = ?
+                WHERE id = ?""",
+                (nombre, marca, cantidad, precio, categoria, id_producto)  # El ID solo se usa en WHERE
+            )
             conn.commit()
-            logging.info(f"✅ Precio actualizado para el producto con ID: {id_producto}")
+            logging.info(f"✅ Producto actualizado con ID: {id_producto}")
             return True
         except sqlite3.Error as e:
             logging.error(f"❌ Error al actualizar producto: {e}")
@@ -258,24 +264,19 @@ def actualizar_producto(id_producto, nuevo_precio):
         finally:
             conn.close()
 
-def eliminar_producto(id_producto):
-    """Elimina un producto por su ID."""
-    """Elimina un producto de la base de datos."""
 
-    conn = conectar_db()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM productos WHERE id = ?", (id_producto,))
-            conn.commit()
-            logging.info(f"✅ Producto con ID {id_producto} eliminado correctamente.")
-            return True
-        except sqlite3.Error as e:
-            logging.error(f"❌ Error al eliminar producto con ID '{id_producto}': {e}")
-            logging.error(f"❌ Error al eliminar producto: {e}")
-            return False
-        finally:
-            conn.close()
+def eliminar_producto(id_producto):
+    try:
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM productos WHERE id = ?", (id_producto,))
+        conn.commit()
+        return cursor.rowcount > 0  # Retorna True si se eliminó
+    except sqlite3.Error as e:
+        logging.error(f"❌ Error al eliminar producto: {e}")
+        return False
+    finally:
+        conn.close()
 
 
 def actualizar_producto(id_producto, nombre, cantidad, precio):
@@ -320,5 +321,21 @@ def obtener_cantidad_productos():
         except sqlite3.Error as e:
             logging.error(f"❌ Error al obtener cantidad de productos: {e}")
             return 0
+        finally:
+            conn.close()
+def importar_desde_excel(archivo):
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            df = pd.read_excel(archivo)
+            for _, row in df.iterrows():
+                cursor.execute("INSERT INTO productos (nombre, marca, cantidad, precio, categoria) VALUES (?, ?, ?, ?, ?)",
+                               (row["Nombre"], row["Marca"], row["Cantidad"], row["Precio"], row["Categoría"]))
+            conn.commit()
+            return True
+        except sqlite3.Error as e:
+            logging.error(f"❌ Error al importar productos desde Excel: {e}")
+            return False
         finally:
             conn.close()

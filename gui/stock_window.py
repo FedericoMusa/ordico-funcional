@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget, QLineEdit, QTableWidgetItem, QHeaderView, QFileDialog, QMessageBox, QLabel
-from core.database import obtener_productos, agregar_producto, actualizar_producto, eliminar_producto
+from core.database import obtener_productos, agregar_producto, actualizar_producto, inicializar_db, importar_desde_excel
+from core.database import eliminar_producto as eliminar_producto_db  # Renombramos solo eliminar_producto
 from .agregar_producto_dialog import AgregarProductoDialog
 import logging
 import pandas as pd
@@ -9,10 +10,9 @@ class StockWindow(QWidget):
 
     def __init__(self, usuario_actual):
         super().__init__()
-        self.usuario_actual = usuario_actual  # Guarda los datos completos del usuario
-        self.usuario_es_admin = self.usuario_actual.get("rol") == "admin"  # Evalúa si es admin
+        self.usuario_actual = usuario_actual
+        self.usuario_es_admin = self.usuario_actual.get("rol") == "admin"
         self.init_ui()
-
 
     def init_ui(self):
         """Inicializa la interfaz de gestión de stock."""
@@ -20,7 +20,6 @@ class StockWindow(QWidget):
         self.setGeometry(200, 200, 900, 500)
 
         layout = QVBoxLayout()
-
         self.label = QLabel("Gestión de Stock")
         layout.addWidget(self.label)
 
@@ -64,18 +63,16 @@ class StockWindow(QWidget):
         """Carga los productos en la tabla desde la base de datos."""
         try:
             productos = obtener_productos() or []
-
-            self.tabla_stock.setRowCount(len(productos))  
+            self.tabla_stock.setRowCount(len(productos))
 
             for i, producto in enumerate(productos):
                 id_producto, nombre, marca, cantidad, precio, categoria = producto  
-
                 self.tabla_stock.setItem(i, 0, QTableWidgetItem(str(id_producto)))
                 self.tabla_stock.setItem(i, 1, QTableWidgetItem(nombre))
                 self.tabla_stock.setItem(i, 2, QTableWidgetItem(marca))  
                 self.tabla_stock.setItem(i, 3, QTableWidgetItem(str(cantidad)))
                 self.tabla_stock.setItem(i, 4, QTableWidgetItem(str(precio)))
-                self.tabla_stock.setItem(i, 5, QTableWidgetItem(categoria))  # Mostrar Categoría
+                self.tabla_stock.setItem(i, 5, QTableWidgetItem(categoria))
 
         except Exception as e:
             logging.error(f"❌ Error al cargar stock: {e}")
@@ -85,8 +82,10 @@ class StockWindow(QWidget):
         """Filtra los productos en la tabla según el texto ingresado."""
         texto = self.campo_busqueda.text().lower()
         for fila in range(self.tabla_stock.rowCount()):
-            visible = any(texto in self.tabla_stock.item(fila, col).text().lower() if self.tabla_stock.item(fila, col) else False
-                          for col in range(self.tabla_stock.columnCount()))
+            visible = any(
+                texto in self.tabla_stock.item(fila, col).text().lower() if self.tabla_stock.item(fila, col) else False
+                for col in range(self.tabla_stock.columnCount())
+            )
             self.tabla_stock.setRowHidden(fila, not visible)
 
     def agregar_producto(self):
@@ -97,12 +96,10 @@ class StockWindow(QWidget):
 
         dialogo = AgregarProductoDialog()
         if dialogo.exec_():
-            self.cargar_stock()  # Refresca la tabla después de agregar
-
-    
+            self.cargar_stock()
 
     def editar_producto(self):
-        """Edita un producto existente. Solo el admin puede hacerlo."""
+        """Edita un producto existente en la base de datos."""
         if not self.usuario_es_admin:
             QMessageBox.warning(self, "Acceso Denegado", "Solo los administradores pueden editar productos.")
             return
@@ -112,21 +109,31 @@ class StockWindow(QWidget):
             QMessageBox.warning(self, "Error", "Por favor, seleccione un producto para editar.")
             return
 
-        id_producto = self.tabla_stock.item(fila_seleccionada, 0).text()
+        id_producto = self.tabla_stock.item(fila_seleccionada, 0)
+        if id_producto is None:
+            QMessageBox.warning(self, "Error", "Producto no válido.")
+            return
+
+        id_producto = id_producto.text()
         nombre = self.tabla_stock.item(fila_seleccionada, 1).text()
         marca = self.tabla_stock.item(fila_seleccionada, 2).text()
         cantidad = self.tabla_stock.item(fila_seleccionada, 3).text()
         precio = self.tabla_stock.item(fila_seleccionada, 4).text()
         categoria = self.tabla_stock.item(fila_seleccionada, 5).text()
 
-        from gui.agregar_producto_dialog import AgregarProductoDialog
-        dialogo = AgregarProductoDialog(id_producto, nombre, marca, cantidad, precio, categoria)
+        dialogo = AgregarProductoDialog()
+        dialogo.input_nombre.setText(nombre)
+        dialogo.input_marca.setText(marca)
+        dialogo.input_cantidad.setText(cantidad)
+        dialogo.input_precio.setText(precio)
+        dialogo.input_categoria.setCurrentText(categoria)
 
         if dialogo.exec_():
-            self.cargar_stock()  # Refresca la tabla después de editar
+            actualizar_producto(id_producto, nombre, marca, cantidad, precio, categoria)  # ✅ ACTUALIZA el producto
+            self.cargar_stock()
 
     def eliminar_producto(self):
-        """Elimina un producto existente. Solo el admin puede hacerlo."""
+        """Elimina un producto del stock."""
         if not self.usuario_es_admin:
             QMessageBox.warning(self, "Acceso Denegado", "Solo los administradores pueden eliminar productos.")
             return
@@ -134,21 +141,39 @@ class StockWindow(QWidget):
         fila_seleccionada = self.tabla_stock.currentRow()
         if fila_seleccionada < 0:
             QMessageBox.warning(self, "Error", "Por favor, seleccione un producto para eliminar.")
-            return        
-        
+            return
+
+        item_id = self.tabla_stock.item(fila_seleccionada, 0)
+        if item_id is None:
+            QMessageBox.warning(self, "Error", "Producto no válido.")
+            return
+
+        id_producto = item_id.text()
+        confirmacion = QMessageBox.question(
+            self, "Eliminar Producto", f"¿Seguro que quieres eliminar el producto ID {id_producto}?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+
+        if confirmacion == QMessageBox.Yes:
+            if eliminar_producto_db(id_producto):
+                QMessageBox.information(self, "Éxito", "Producto eliminado correctamente.")
+                self.cargar_stock()
+            else:
+                QMessageBox.warning(self, "Error", "No se pudo eliminar el producto.")
+
     def importar_desde_excel(self):
         """Importa productos desde un archivo Excel."""
-        archivo, _ = QFileDialog.getOpenFileName(self, "Seleccionar Archivo", "", "Archivos de Excel (*.xlsx)")
+        if not self.usuario_es_admin:
+            QMessageBox.warning(self, "Acceso Denegado", "Solo los administradores pueden importar productos.")
+            return
+
+        archivo, _ = QFileDialog.getOpenFileName(self, "Seleccionar Archivo", "", "Archivos Excel (*.xlsx)")
         if archivo:
-            try:
-                df = pd.read_excel(archivo)
-                for _, row in df.iterrows():
-                    agregar_producto(row["ID"], row["Nombre"], row["Marca"], row["Cantidad"], row["Precio"], row["Categoría"])
+            if importar_desde_excel(archivo):
                 QMessageBox.information(self, "Éxito", "Productos importados correctamente.")
                 self.cargar_stock()
-            except Exception as e:
-                logging.error(f"❌ Error al importar productos desde Excel: {e}")
-                QMessageBox.critical(self, "Error", f"No se pudo importar los productos desde Excel: {e}")
-         # Refresca la tabla despues de eliminar
-# Asegurar que `StockWindow` está disponible para otros módulos
-__all__ = ["StockWindow"]
+            else:
+                QMessageBox.warning(self, "Error", "No se pudo importar los productos.")
+
+        else:
+            QMessageBox.warning(self, "Error", "No se selecciono ningun archivo.")

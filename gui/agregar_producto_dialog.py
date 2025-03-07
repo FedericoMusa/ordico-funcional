@@ -5,12 +5,16 @@ from core.database import agregar_producto, obtener_productos
 
 categorias_en_memoria = [
     "Comestibles", "Lácteos", "Panadería", "Dulces", "Jardinería",
-    "Cuidado personal", "Carnes rojas", "Carnes blancas", "Productos Varios"
-]
+    "Cuidado personal", "Carnes rojas", "Carnes blancas", "Productos Varios"]
 
 class AgregarProductoDialog(QDialog):
-    def __init__(self):
+    def __init__(self, nombre="", marca="", cantidad="", precio="", categoria=""):
         super().__init__()
+        self.nombre = nombre
+        self.marca = marca
+        self.cantidad = cantidad
+        self.precio = precio
+        self.categoria = categoria
         self.init_ui()
 
     def init_ui(self):
@@ -20,21 +24,22 @@ class AgregarProductoDialog(QDialog):
 
         form_layout = QFormLayout()
 
-        self.input_nombre = QLineEdit()
-        self.input_marca = QLineEdit()
-        self.input_cantidad = QLineEdit()
-        self.input_precio = QLineEdit()
+        self.input_nombre = QLineEdit(self.nombre)
+        self.input_marca = QLineEdit(self.marca)
+        self.input_cantidad = QLineEdit(str(self.cantidad))
+        self.input_precio = QLineEdit(str(self.precio))
 
         # 🔹 QComboBox para sugerir categorías
         self.input_categoria = QComboBox()
-        self.input_categoria.setEditable(True)  # Permite que el usuario escriba nuevas categorías
-        self.input_categoria.addItems(categorias_en_memoria)  # Carga las categorías existentes en memoria
+        self.input_categoria.setEditable(True)  # Permite escribir nuevas categorías
+        self.input_categoria.addItems(categorias_en_memoria)  
+        self.input_categoria.setCurrentText(self.categoria)  # ✅ Selecciona la categoría si está en los datos
 
         form_layout.addRow(QLabel("Nombre:"), self.input_nombre)
         form_layout.addRow(QLabel("Marca:"), self.input_marca)
         form_layout.addRow(QLabel("Cantidad:"), self.input_cantidad)
         form_layout.addRow(QLabel("Precio:"), self.input_precio)
-        form_layout.addRow(QLabel("Categoría:"), self.input_categoria)  # ✅ Categoría con sugerencias
+        form_layout.addRow(QLabel("Categoría:"), self.input_categoria)
 
         self.btn_guardar = QPushButton("Guardar")
         self.btn_cancelar = QPushButton("Cancelar")
